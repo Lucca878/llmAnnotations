@@ -1,0 +1,5 @@
+openrouter
+python-dotenv
+pandas
+numpy
+pydantic

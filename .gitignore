@@ -1,0 +1,19 @@
+# Secrets
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.Python
+*.egg-info/
+dist/
+build/
+.venv/
+env/
+
+# macOS
+.DS_Store
+
+# Results (opt-in: commit only if desired)
+results/
