@@ -1,8 +1,35 @@
-# LLM Annotations
+# LLM annotations
 
 Structured LLM annotation pipeline for deception-related cues (i.e., `reality_monitoring`) using OpenRouter models.
 
-## What This Project Does
+## Before you run
+
+Create output folders first:
+
+```bash
+mkdir -p results results/test
+```
+
+General project structure:
+
+```text
+deceptionAnnotationsLLM/
+├─ data/
+│  └─ HIP_2022_id.csv
+├─ results/
+│  └─ test/
+├─ src/
+│  ├─ app.py
+│  ├─ config.py
+│  ├─ dao.py
+│  ├─ llm_client.py
+│  └─ utility.py
+├─ environment.yml
+├─ requirements.txt
+└─ README.md
+```
+
+## How the project works
 
 For each run, using [data/HIP_2022_id.csv](data/HIP_2022_id.csv), the app:
 
@@ -12,7 +39,7 @@ For each run, using [data/HIP_2022_id.csv](data/HIP_2022_id.csv), the app:
 4. Enforces structured JSON output using OpenRouter `response_format` JSON schema.
 5. Writes one row per annotation to a CSV in [results](results).
 
-## Project Structure
+## Project structure
 
 - [src/config.py](src/config.py): all runtime configuration
 - [src/app.py](src/app.py): main annotation loop
@@ -48,7 +75,7 @@ conda env create -f environment.yml
 conda activate llm-annotations
 ```
 
-## API Key
+## API key
 
 Create a `.env` in project root:
 
@@ -127,7 +154,7 @@ Enforcement is handled in [src/llm_client.py](src/llm_client.py):
 
 If it fails 3 times, an error is raised.
 
-## Adding a New Annotation Type
+## Adding a new annotation type
 
 To add another criterion:
 

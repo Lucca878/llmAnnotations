@@ -15,5 +15,5 @@ env/
 # macOS
 .DS_Store
 
-# Results (opt-in: commit only if desired)
+# Results (commit only if desired)
 results/
