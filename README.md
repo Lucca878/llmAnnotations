@@ -35,7 +35,7 @@ For each run, using [data/HIP_2022_id.csv](data/HIP_2022_id.csv), the app:
 
 1. Samples statements without replacement.
 2. For each sampled statement and each repeat annotation, builds the annotation prompt.
-3. Sends system + user prompts to OpenRouter.
+3. Sends the annotation prompt to OpenRouter.
 4. Enforces structured JSON output using OpenRouter `response_format` JSON schema.
 5. Writes one row per annotation to a CSV in [results](results).
 
@@ -56,7 +56,7 @@ From [requirements.txt](requirements.txt):
 - python-dotenv
 - pandas
 - numpy
-- pydantic
+- krippendorff
 
 ## Setup
 
@@ -90,11 +90,14 @@ OPENROUTER_API_KEY=your_key_here
 Edit [src/config.py](src/config.py):
 
 - `LLM_ARCHITECTURE`: active model name + OpenRouter model id
-- `ANNOTATION_TYPE`: selects which user prompt template is used
+- `ANNOTATION_TYPE`: `reality_monitoring`, `specificity`, or `cbca`
 - `ANNOTATION_SCORE_MIN` / `ANNOTATION_SCORE_MAX`: score range used by prompt and structured-output schema
 - `ANNOTATIONS_PER_STATEMENT`: repeat annotations per statement
 - `N_STATEMENTS`: number of statements to sample (values above dataset size use all statements)
 - `USE_FIXED_TEMPERATURE` and `FIXED_TEMPERATURE` or `TEMPERATURE_MIN` / `TEMPERATURE_MAX`
+- `CBCA_EVENT_DOMAIN`: optional domain guidance for CBCA criteria C11 and C19
+- `CBCA_PARTICIPANT`: optional participant definition for CBCA criterion C13
+- `CBCA_CALIBRATION_EXAMPLES`: optional corpus-specific CBCA examples
 - `DATASET_PATH` and `RESULTS_DIR`
 
 ## Run
@@ -111,9 +114,9 @@ python src/app.py
 python src/app.py --n-statements 50 --annotations-per-statement 5
 ```
 
-### Annotate all unique statements
+### Annotate all statements
 
-If you set `--n-statements` to a value above dataset size. The pipeline will use all unique statements automatically.
+Set `--n-statements` to a value above the dataset size. The pipeline will use all statements automatically.
 
 ### Test mode
 
@@ -129,6 +132,30 @@ In `--test` mode, it caps to 3 statements x 2 annotations and writes under `resu
 python src/app.py --max-tokens 300
 ```
 
+## Replicates and reliability
+
+The model is treated as one coder among several. The default configuration runs three independent
+annotations per statement at temperature `0.7`:
+
+```python
+ANNOTATIONS_PER_STATEMENT = 3
+USE_FIXED_TEMPERATURE = True
+FIXED_TEMPERATURE = 0.7
+```
+
+Each replicate is saved as a separate CSV row. The `annotation_number_per_statement` column identifies
+the replicate, and the `annotation_id` identifies the individual annotation.
+
+The replicate spread is retained for downstream reliability analysis. For CBCA analysis, use:
+
+- the modal or median score across replicates as a stable summary
+- ICC(2,k) for the summed CBCA score
+- Krippendorff's alpha separately for each criterion
+- per-criterion alpha together with per-criterion prevalence
+
+Low-prevalence criteria such as C10, C16, C17, and C18 can have deceptively high percentage agreement
+while alpha is poor, so both prevalence and alpha should be reported.
+
 ## Output
 
 Each run creates a fresh CSV:
@@ -142,7 +169,15 @@ Columns written include:
 - `annotation_score`, `annotation_type`, `rationale`
 - `llm_architecture`, `temperature`
 - `started_at`, `received_at`, `annotation_duration_ms`
-- `system_prompt`, `annotation_prompt`
+- `annotation_prompt`
+- `criterion_alpha`: JSON mapping `C1` through `C19` to run-level Krippendorff alpha values; `none` when only one replicate is collected
+
+For `ANNOTATION_TYPE = "cbca"`, the CSV instead includes the CBCA output fields:
+
+- `statement_id`, `speaker_word_count`, `codeable`, `codeability_note`
+- Separate columns for each criterion: `C1_score` through `C19_score`
+- Separate `C1_instance_count`, `C1_evidence`, `C1_justification`, `C1_confidence`, and `C1_alpha` columns, repeated for C2 through C19
+- run metadata such as `session_id`, `annotation_id`, `temperature`, and timestamps
 
 ## Structured Output Enforcement
 
@@ -153,6 +188,10 @@ Enforcement is handled in [src/llm_client.py](src/llm_client.py):
 3. If the call/parsing fails, it retries up to 3 times.
 
 If it fails 3 times, an error is raised.
+
+## CBCA
+
+Set `ANNOTATION_TYPE = "cbca"` in [src/config.py](src/config.py). The request then uses the CBCA prompt and strict structured schema. Each response contains 19 criteria in order, with no total score and no veracity judgment. Set `CBCA_EVENT_DOMAIN`, `CBCA_PARTICIPANT`, and `CBCA_CALIBRATION_EXAMPLES` before using the corpus-specific criteria.
 
 ## Adding a new annotation type
 

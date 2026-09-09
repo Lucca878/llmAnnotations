@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 @dataclass
 class AnnotationRecord:
@@ -18,5 +18,5 @@ class AnnotationRecord:
     started_at: str
     received_at: str
     annotation_duration_ms: int
-    system_prompt: str
     annotation_prompt: str
+    annotation_payload: dict = field(default_factory=dict)

@@ -3,9 +3,6 @@ import json
 from openrouter import OpenRouter
 from config import (
     LLM_ARCHITECTURE,
-    ANNOTATION_TYPE,
-    ANNOTATION_SCORE_MIN,
-    ANNOTATION_SCORE_MAX,
 )
 # from utility import validate_annotation_response
 
@@ -20,20 +17,49 @@ def _get_model_id(architecture: str) -> str:
     return LLM_ARCHITECTURE["model"]
 
 
+def _response_schema():
+    criterion_schema = {
+        "type": "object",
+        "properties": {
+            "id": {"type": "integer", "minimum": 1, "maximum": 19},
+            "name": {"type": "string"},
+            "score": {"anyOf": [{"type": "integer", "minimum": 0, "maximum": 2}, {"type": "null"}]},
+            "instance_count": {"type": "integer", "minimum": 0},
+            "evidence": {"type": "array", "items": {"type": "string"}, "maxItems": 6},
+            "justification": {
+                "type": "string",
+                "pattern": r"^$|^\S+(\s+\S+){0,2}$",
+            },
+            "confidence": {"type": "string", "enum": ["high", "medium", "low"]},
+        },
+        "required": ["id", "name", "score", "instance_count", "evidence", "justification", "confidence"],
+        "additionalProperties": False,
+    }
+    return {
+        "type": "object",
+        "properties": {
+            "statement_id": {"anyOf": [{"type": "integer"}, {"type": "null"}]},
+            "speaker_word_count": {"type": "integer", "minimum": 0},
+            "codeable": {"type": "boolean"},
+            "codeability_note": {"type": "string"},
+            "criteria": {"type": "array", "minItems": 19, "maxItems": 19, "items": criterion_schema},
+        },
+        "required": ["statement_id", "speaker_word_count", "codeable", "codeability_note", "criteria"],
+        "additionalProperties": False,
+    }
+
+
 def call_llm(
     architecture: str,
     prompt: str,
     temperature: float,
-    system_prompt: str,
     max_tokens: int = None,
 ) -> dict:
-    """Call OpenRouter and return validated structured annotation output."""
+    """Call OpenRouter with the complete annotation prompt."""
     client = _build_client()
     model_id = _get_model_id(architecture)
 
-    messages = []
-    messages.append({"role": "system", "content": system_prompt})
-    messages.append({"role": "user", "content": prompt})
+    messages = [{"role": "user", "content": prompt}]
 
     kwargs = {
         "model": model_id,
@@ -44,25 +70,7 @@ def call_llm(
             "json_schema": {
                 "name": "annotation_response",
                 "strict": True,
-                "schema": {
-                    "type": "object",
-                    "properties": {
-                        "annotation_type": {
-                            "type": "string",
-                            "enum": [ANNOTATION_TYPE],
-                        },
-                        "annotation_score": {
-                            "type": "integer",
-                            "minimum": ANNOTATION_SCORE_MIN,
-                            "maximum": ANNOTATION_SCORE_MAX,
-                        },
-                        "rationale": {
-                            "type": "string",
-                        },
-                    },
-                    "required": ["annotation_type", "annotation_score", "rationale"],
-                    "additionalProperties": False,
-                },
+                "schema": _response_schema(),
             },
         },
     }

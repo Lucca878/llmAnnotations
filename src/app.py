@@ -24,9 +24,9 @@ from utility import (
     load_dataset,
     sample_statements,
     annotation_prompt,
-    system_prompt,
     init_results_csv,
     append_sequence_to_csv,
+    add_criterion_alpha,
 )
 
 def _build_temperatures(n_annotations: int) -> np.ndarray:
@@ -41,17 +41,12 @@ def _build_temperatures(n_annotations: int) -> np.ndarray:
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Structured LLM annotation"
-    )
+    parser = argparse.ArgumentParser(description="Structured LLM annotation")
     parser.add_argument(
         "--n-statements",
         type=int,
         default=N_STATEMENTS,
-        help=(
-            "Number of unique statements to annotate "
-            f"(default: {N_STATEMENTS}; values above dataset size use all unique statements)"
-        ),
+        help=f"Number of statements to annotate (default: {N_STATEMENTS})",
     )
     parser.add_argument(
         "--annotations-per-statement",
@@ -114,8 +109,7 @@ def main():
         statement_id = int(row.get("statement_id", statement_idx))
         statement_text = str(row.get("text", ""))
         original_label = str(row.get("label_standardized", row.get("label_original", "")))
-        prompt_text = annotation_prompt(ANNOTATION_TYPE, statement_text)
-        sys_prompt = system_prompt()
+        prompt_text = annotation_prompt(ANNOTATION_TYPE, statement_text, statement_id)
 
         for annotation_number in range(1, args.annotations_per_statement + 1):
             temperature = float(temperatures[global_idx])
@@ -126,9 +120,9 @@ def main():
                 architecture=architecture,
                 prompt=prompt_text,
                 temperature=temperature,
-                system_prompt=sys_prompt,
                 max_tokens=args.max_tokens,
             )
+            structured["speaker_word_count"] = len(statement_text.split())
 
             received_at = datetime.datetime.utcnow().isoformat() + "Z"
             duration_ms = int((time.time() - t0) * 1000)
@@ -140,16 +134,16 @@ def main():
                 original_label=original_label,
                 annotation_id=str(uuid.uuid4()),
                 annotation_number_per_statement=annotation_number,
-                annotation_score=structured["annotation_score"],
-                annotation_type=structured["annotation_type"],
-                rationale=structured["rationale"],
+                annotation_score=structured.get("annotation_score", ""),
+                annotation_type=structured.get("annotation_type", ANNOTATION_TYPE),
+                rationale=structured.get("rationale", ""),
                 llm_architecture=architecture,
                 temperature=temperature,
                 started_at=started_at,
                 received_at=received_at,
                 annotation_duration_ms=duration_ms,
-                system_prompt=sys_prompt,
                 annotation_prompt=prompt_text,
+                annotation_payload=structured,
             )
 
             append_sequence_to_csv(csv_path, record)
@@ -158,13 +152,16 @@ def main():
                 f"  [{architecture}] {global_idx + 1}/{total_annotations} | "
                 f"statement={statement_idx}/{args.n_statements} | "
                 f"annotation={annotation_number}/{args.annotations_per_statement} | "
-                f"score={record.annotation_score} | "
+                f"score={record.annotation_score if ANNOTATION_TYPE != 'cbca' else '19 criteria'} | "
                 f"temp={temperature:.3f} | "
                 f"duration={duration_ms}ms"
             )
 
             global_idx += 1
 
+    if ANNOTATION_TYPE == "cbca":
+        add_criterion_alpha(csv_path, args.annotations_per_statement)
+        print(f"Criterion alpha saved -> {csv_path}")
     print("\nDone.")
 
 
