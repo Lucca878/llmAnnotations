@@ -1,6 +1,6 @@
 # LLM annotations
 
-Structured LLM annotation pipeline for deception-related cues (i.e., `reality_monitoring`) using OpenRouter models.
+Structured LLM annotation pipeline for CBCA, Reality Monitoring, and Verifiability cues using OpenRouter models.
 
 ## Before you run
 
@@ -23,6 +23,8 @@ deceptionAnnotationsLLM/
 │  ├─ config.py
 │  ├─ dao.py
 │  ├─ llm_client.py
+│  ├─ prompts.py
+│  ├─ schemas.py
 │  └─ utility.py
 ├─ environment.yml
 ├─ requirements.txt
@@ -34,17 +36,20 @@ deceptionAnnotationsLLM/
 For each run, using [data/HIP_2022_id.csv](data/HIP_2022_id.csv), the app:
 
 1. Samples statements without replacement.
-2. For each sampled statement and each repeat annotation, builds the annotation prompt.
-3. Sends the annotation prompt to OpenRouter.
-4. Enforces structured JSON output using OpenRouter `response_format` JSON schema.
-5. Writes one row per annotation to a CSV in [results](results).
+2. Selects the configured annotation type(s): CBCA, Reality Monitoring, Verifiability, or all three.
+3. Builds the exact instrument-specific prompt for each sampled statement.
+4. Sends the prompt to OpenRouter with the corresponding structured JSON schema.
+5. Saves one output CSV per annotation type.
+6. For CBCA, calculates criterion-level Krippendorff alpha after all replicates are collected.
 
 ## Project structure
 
 - [src/config.py](src/config.py): all runtime configuration
-- [src/app.py](src/app.py): main annotation loop
-- [src/llm_client.py](src/llm_client.py): OpenRouter request + structured validation call
-- [src/utility.py](src/utility.py): prompt builders, CSV helpers
+- [src/app.py](src/app.py): main annotation loop and CLI
+- [src/prompts.py](src/prompts.py): exact CBCA, RM, and VA prompt builders
+- [src/schemas.py](src/schemas.py): OpenRouter structured-output schemas
+- [src/llm_client.py](src/llm_client.py): OpenRouter request and JSON parsing
+- [src/utility.py](src/utility.py): dataset sampling, CSV writing, and CBCA alpha
 - [src/dao.py](src/dao.py): `AnnotationRecord` data model
 - [data/HIP_2022_id.csv](data/HIP_2022_id.csv): input dataset
 
@@ -90,14 +95,20 @@ OPENROUTER_API_KEY=your_key_here
 Edit [src/config.py](src/config.py):
 
 - `LLM_ARCHITECTURE`: active model name + OpenRouter model id
-- `ANNOTATION_TYPE`: `reality_monitoring`, `specificity`, or `cbca`
-- `ANNOTATION_SCORE_MIN` / `ANNOTATION_SCORE_MAX`: score range used by prompt and structured-output schema
+- `ANNOTATION_TYPE`: `cbca`, `reality_monitoring`, `verifiability`, or `all`
 - `ANNOTATIONS_PER_STATEMENT`: repeat annotations per statement
 - `N_STATEMENTS`: number of statements to sample (values above dataset size use all statements)
 - `USE_FIXED_TEMPERATURE` and `FIXED_TEMPERATURE` or `TEMPERATURE_MIN` / `TEMPERATURE_MAX`
 - `CBCA_EVENT_DOMAIN`: optional domain guidance for CBCA criteria C11 and C19
 - `CBCA_PARTICIPANT`: optional participant definition for CBCA criterion C13
-- `CBCA_CALIBRATION_EXAMPLES`: optional corpus-specific CBCA examples
+- `CBCA_CALIBRATION_EXAMPLES`: optional CBCA-specific calibration examples
+- `RM_RATING_MIN` / `RM_RATING_MAX`: Reality Monitoring rating range
+- `RM_INCLUDE_C6_C7`: whether Reality Monitoring C6 and C7 are scored or returned as null
+- `RM_CALIBRATION_EXAMPLES`: optional RM-specific calibration examples
+- `VA_INFORMATION_PROTOCOL`: optional VA metadata, `informed`, `uninformed`, or None
+- `VA_IDENTIFIABILITY_THRESHOLD`: optional VA threshold guidance
+- `VA_GRANULARITY`: optional VA detail granularity guidance
+- `VA_CALIBRATION_EXAMPLES`: optional VA-specific calibration examples
 - `DATASET_PATH` and `RESULTS_DIR`
 
 ## Run
@@ -162,17 +173,7 @@ Each run creates a fresh CSV:
 
 - `results/<architecture>_<annotation_type>_<timestamp>.csv`
 
-Columns written include:
-
-- `session_id`, `statement_id`, `original_text`, `original_label`
-- `annotation_id`, `annotation_number_per_statement`
-- `annotation_score`, `annotation_type`, `rationale`
-- `llm_architecture`, `temperature`
-- `started_at`, `received_at`, `annotation_duration_ms`
-- `annotation_prompt`
-- `criterion_alpha`: JSON mapping `C1` through `C19` to run-level Krippendorff alpha values; `none` when only one replicate is collected
-
-For `ANNOTATION_TYPE = "cbca"`, the CSV instead includes the CBCA output fields:
+All output files share run and statement metadata. CBCA output files include:
 
 - `statement_id`, `speaker_word_count`, `codeable`, `codeability_note`
 - Separate columns for each criterion: `C1_score` through `C19_score`
@@ -189,18 +190,19 @@ Enforcement is handled in [src/llm_client.py](src/llm_client.py):
 
 If it fails 3 times, an error is raised.
 
-## CBCA
+## Annotation types
 
-Set `ANNOTATION_TYPE = "cbca"` in [src/config.py](src/config.py). The request then uses the CBCA prompt and strict structured schema. Each response contains 19 criteria in order, with no total score and no veracity judgment. Set `CBCA_EVENT_DOMAIN`, `CBCA_PARTICIPANT`, and `CBCA_CALIBRATION_EXAMPLES` before using the corpus-specific criteria.
+Set `ANNOTATION_TYPE` in [src/config.py](src/config.py):
 
-## Adding a new annotation type
+- `cbca`: run Criteria-Based Content Analysis only
+- `reality_monitoring`: run Reality Monitoring only
+- `verifiability`: run the Verifiability Approach only
+- `all`: run all three prompts and write one separate CSV per instrument
 
-To add another criterion:
-
-1. Add a new user prompt in [src/utility.py](src/utility.py).
-2. Register it in `_ANNOTATION_PROMPT_BUILDERS`.
-3. Set `ANNOTATION_TYPE` in [src/config.py](src/config.py).
-4. If score scale differs, update `ANNOTATION_SCORE_MIN` / `ANNOTATION_SCORE_MAX` in [src/config.py](src/config.py).
+CBCA files include flattened `C1_score` through `C19_score` columns plus evidence, justification,
+confidence, and criterion alpha columns. Reality Monitoring files include flattened `C1_score`
+through `C8_score` columns plus the C2 modality counts. Verifiability files include
+`scenario_verifiable`, `scenario_note`, `information_protocol`, and the extracted `details` JSON.
 
 ## Notes
 

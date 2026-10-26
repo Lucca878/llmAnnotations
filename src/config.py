@@ -23,14 +23,21 @@ TEMPERATURE_MAX = 1.0
 # ---------------------------------------------------------------------------
 # Annotation parameters
 # ---------------------------------------------------------------------------
-ANNOTATION_TYPE = "cbca"
-ANNOTATION_SCORE_MIN = 0
-ANNOTATION_SCORE_MAX = 2
+ANNOTATION_TYPE = "all"  # "cbca", "reality_monitoring", "verifiability", or "all"
+ANNOTATION_TYPES = ["cbca", "reality_monitoring", "verifiability"]
 ANNOTATIONS_PER_STATEMENT = 1 # replicate annotations per statement
 N_STATEMENTS = 100 # number of statements to sample from the dataset for annotation
 CBCA_EVENT_DOMAIN = ""
 CBCA_PARTICIPANT = ""
 CBCA_CALIBRATION_EXAMPLES = ""
+RM_RATING_MIN = 1
+RM_RATING_MAX = 7
+RM_INCLUDE_C6_C7 = True
+RM_CALIBRATION_EXAMPLES = ""
+VA_INFORMATION_PROTOCOL = None
+VA_IDENTIFIABILITY_THRESHOLD = ""
+VA_GRANULARITY = ""
+VA_CALIBRATION_EXAMPLES = ""
 
 # ---------------------------------------------------------------------------
 # Paths
